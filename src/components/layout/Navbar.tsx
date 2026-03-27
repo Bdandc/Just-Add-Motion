@@ -1,13 +1,23 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sparkles, User, LogOut } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+import { toast } from 'sonner';
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
   const isAppPage = location.pathname === '/create' || location.pathname === '/account';
 
   if (isAuthPage) return null;
+
+  const handleLogout = async () => {
+    await signOut();
+    toast.success('Logged out');
+    navigate('/');
+  };
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
@@ -20,7 +30,7 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-4">
-          {isAppPage ? (
+          {user ? (
             <>
               <Link to="/create">
                 <Button variant={location.pathname === '/create' ? 'secondary' : 'ghost'} size="sm">
@@ -33,13 +43,15 @@ export default function Navbar() {
                   Account
                 </Button>
               </Link>
-              <Link to="/">
-                <Button variant="ghost" size="sm">
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Logout
-                </Button>
-              </Link>
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
             </>
+          ) : isAppPage ? (
+            <Link to="/login">
+              <Button size="sm" className="gradient-bg glow-primary">Login</Button>
+            </Link>
           ) : (
             <>
               <Link to="/login" className="hidden sm:block">
