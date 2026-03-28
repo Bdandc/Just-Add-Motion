@@ -21,6 +21,17 @@ import { generateVideo, MODELS, type ModelId } from '@/lib/fal';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
+const ACCEPTED_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+];
+
 export default function CreatePage() {
   const { user } = useAuth();
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -39,6 +50,11 @@ export default function CreatePage() {
   const handleUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      toast.error(`Unsupported format: ${file.type || 'unknown'}. Use JPEG, PNG, WebP, GIF, or AVIF.`);
+      return;
+    }
 
     if (file.size > 20 * 1024 * 1024) {
       toast.error("File too large (max 20MB)");
@@ -91,8 +107,9 @@ export default function CreatePage() {
         });
       }
     } catch (err) {
-      console.error(err);
-      toast.error("Generation failed. Please try again.");
+      console.error('[generateVideo error]', err);
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`Generation failed: ${message}`);
     } finally {
       setIsGenerating(false);
       setGeneratingStatus('');
@@ -159,7 +176,7 @@ export default function CreatePage() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2">Drop your image here</h3>
                 <p className="text-sm text-muted-foreground mb-4">or click to browse your files</p>
-                <p className="text-xs text-muted-foreground/60 uppercase tracking-widest">JPG, PNG, WEBP (Max 20MB)</p>
+                <p className="text-xs text-muted-foreground/60 uppercase tracking-widest">JPG · PNG · WebP · GIF · AVIF · HEIC (Max 20MB)</p>
               </div>
             )}
             <input 
@@ -167,7 +184,7 @@ export default function CreatePage() {
               ref={fileInputRef} 
               onChange={handleUpload} 
               className="hidden" 
-              accept="image/*" 
+              accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif"
             />
           </div>
         </div>

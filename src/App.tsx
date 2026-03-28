@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
+import { ThemeProvider, useTheme } from '@/lib/theme';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
@@ -9,6 +10,11 @@ import CreatePage from './pages/CreatePage';
 import AccountPage from './pages/AccountPage';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
+
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return <Toaster position="bottom-right" theme={theme} closeButton />;
+}
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -37,18 +43,20 @@ function AppRoutes() {
         </Routes>
       </main>
       <Footer />
-      <Toaster position="bottom-right" theme="dark" closeButton />
+      <ThemedToaster />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <Router>
-      <ScrollToTop />
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <ScrollToTop />
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </Router>
+    </ThemeProvider>
   );
 }

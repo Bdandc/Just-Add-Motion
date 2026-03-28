@@ -1,13 +1,15 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Sparkles, User, LogOut } from 'lucide-react';
+import { Sparkles, User, LogOut, Sun, Moon } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/lib/theme';
 import { toast } from 'sonner';
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
   const isAppPage = location.pathname === '/create' || location.pathname === '/account';
 
@@ -30,6 +32,9 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </Button>
           {user ? (
             <>
               <Link to="/create">
