@@ -101,7 +101,6 @@ export default function CreatePage() {
     setSelectedSuggestion(null);
     setShowCustom(false);
     setPrompt('');
-    setResultVideo(null);
 
     const reader = new FileReader();
     reader.onload = (ev) => {
