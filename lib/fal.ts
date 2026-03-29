@@ -23,7 +23,7 @@ export interface ModelOption {
 export const MODELS: ModelOption[] = [
   {
     id: 'wan',
-    falId: 'fal-ai/wan/v2.1/image-to-video',
+    falId: 'fal-ai/wan-i2v',
     name: 'Wan 2.1',
     tier: 'budget',
     tierLabel: 'Budget',
@@ -35,8 +35,8 @@ export const MODELS: ModelOption[] = [
   },
   {
     id: 'kling',
-    falId: 'fal-ai/kling-video/v1.6/standard/image-to-video',
-    name: 'Kling 1.6',
+    falId: 'fal-ai/kling-video/o3/standard/image-to-video',
+    name: 'Kling 3.0',
     tier: 'balanced',
     tierLabel: 'Balanced',
     costPer4s: '~$0.11',
@@ -47,8 +47,8 @@ export const MODELS: ModelOption[] = [
   },
   {
     id: 'veo3',
-    falId: 'fal-ai/veo3/fast/image-to-video',
-    name: 'Veo 3 Fast',
+    falId: 'fal-ai/veo3.1/image-to-video',
+    name: 'Veo 3.1 Fast',
     tier: 'premium',
     tierLabel: 'Premium',
     costPer4s: '~$0.40',
@@ -70,12 +70,6 @@ export interface GenerateVideoResult {
   videoUrl: string;
 }
 
-// Kling only accepts "5" or "10" — map our UI values to the nearest valid option
-function klingDuration(duration: string): '5' | '10' {
-  const secs = parseInt(duration);
-  return secs <= 6 ? '5' : '10';
-}
-
 function buildInput(imageUrl: string, input: GenerateVideoInput) {
   const secs = parseInt(input.duration); // "4s" → 4
 
@@ -92,7 +86,7 @@ function buildInput(imageUrl: string, input: GenerateVideoInput) {
     return {
       image_url: imageUrl,
       prompt: input.prompt,
-      duration: klingDuration(input.duration),
+      duration: secs, // Kling O3 accepts 3–15 as a number
       aspect_ratio: '16:9',
     };
   }
@@ -101,10 +95,8 @@ function buildInput(imageUrl: string, input: GenerateVideoInput) {
   return {
     image_url: imageUrl,
     prompt: input.prompt,
-    duration: String(secs),
+    duration: input.duration, // "4s" | "6s" | "8s"
     aspect_ratio: '16:9',
-    resolution: '720p',
-    generate_audio: false,
   };
 }
 

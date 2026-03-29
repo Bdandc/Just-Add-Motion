@@ -7,6 +7,7 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import CreatePage from './pages/CreatePage';
+import PreviewPage from './pages/PreviewPage';
 import AccountPage from './pages/AccountPage';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
@@ -39,6 +40,7 @@ function AppRoutes() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/create" element={<ProtectedRoute><CreatePage /></ProtectedRoute>} />
+          <Route path="/preview" element={<ProtectedRoute><PreviewPage /></ProtectedRoute>} />
           <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
         </Routes>
       </main>
