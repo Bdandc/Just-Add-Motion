@@ -7,18 +7,19 @@ const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 // Plain-English analysis — generates 3 user-facing options with a hidden base prompt
 const ANALYSIS_PROMPT = `You are analyzing an image to suggest motion styles for an AI image-to-video generator.
 
-Your job is to suggest 3 distinct, creative ways the image could be animated. Each option should feel meaningfully different — e.g. one intimate/close, one wide/environmental, one abstract/atmospheric.
+Your job is to suggest 3 distinct ways the image could be animated using camera movement and subject motion only. Each option should feel meaningfully different — e.g. one intimate/close, one wide/environmental, one with subject movement.
 
 For each option provide:
 - "label": 2–4 word plain English title a non-expert would understand (e.g. "Slow Zoom In", "Gentle Sway", "Rising Camera")
 - "description": 1 plain-English sentence describing what the viewer will see — no technical jargon (e.g. "The camera slowly moves closer, bringing out the texture and detail of the subject.")
-- "prompt": a detailed technical motion prompt for the AI model — cinematic language, 2–3 sentences, referencing actual elements in the image. This is what gets sent to the video model, not shown to the user.
+- "prompt": a technical motion prompt for the AI model — cinematic language, 1–2 sentences. This is what gets sent to the video model, not shown to the user.
 
-Rules for the technical prompt:
-- Reference actual visible elements — never invent objects
-- Include a primary motion (camera or subject) + an atmospheric layer (light, particles, shadow, etc.)
-- Be specific: "dolly in", "parallax drift", "handheld sway", "upward crane", "rack focus"
-- Bias toward subtle, elegant motion over dramatic
+STRICT RULES for the technical prompt:
+- Describe ONLY camera movement (dolly, pan, tilt, crane, rack focus, zoom) and movement of elements ALREADY visible in the image
+- NEVER add, invent, or suggest any objects, particles, effects, creatures, people, or environmental elements that are not clearly present in the original image
+- NO "dust particles", "smoke", "fog", "bokeh orbs", "lens flares", "floating debris", "haze", or any other invented atmospheric elements
+- Motion only — do not change the content of the scene
+- Be specific with camera terms: "dolly in", "parallax drift", "handheld sway", "upward crane", "rack focus"
 
 Respond ONLY with a valid JSON array of exactly 3 objects. No markdown, no backticks, no explanation.
 
@@ -27,7 +28,7 @@ Example:
   {
     "label": "Slow Zoom In",
     "description": "The camera gently moves closer, drawing the viewer into the scene.",
-    "prompt": "Slow dolly push into the scene, soft rack focus from mid-ground to foreground detail. Ambient dust particles drift through warm directional light, casting subtle shifting shadows across textured surfaces."
+    "prompt": "Slow dolly push into the scene, soft rack focus from mid-ground to foreground. The camera holds steady as subtle natural movement plays out across the existing scene."
   }
 ]`;
 
@@ -35,23 +36,23 @@ export type Complexity = 'simple' | 'moderate' | 'complex';
 
 const COMPLEXITY_HINTS: Record<Complexity, string> = {
   simple:
-    'Animation complexity: SIMPLE. Use a single, clean primary motion only. No layering, no atmospheric details. Short and unambiguous — 1 sentence max.',
+    'Animation complexity: SIMPLE. One clean camera motion only. No secondary movement. 1 sentence max.',
   moderate:
-    'Animation complexity: MODERATE. Include a primary motion plus one light atmospheric or environmental detail. Balanced — not too sparse, not too dense.',
+    'Animation complexity: MODERATE. A primary camera motion plus one secondary movement from an element already in the image. 1–2 sentences.',
   complex:
-    'Animation complexity: COMPLEX. Layer multiple elements: a strong primary motion, secondary environmental or subject motion, atmospheric effects (particles, light, haze), and a texture/lighting note. Rich and cinematic — make full use of the model\'s capabilities.',
+    'Animation complexity: COMPLEX. A strong primary camera motion, a secondary motion from existing subjects in the scene, and a specific camera technique (e.g. rack focus, parallax). 2–3 sentences. Do NOT add any new objects or effects not visible in the original image.',
 };
 
 // Per-model tailoring hints — what each model responds to best
 const MODEL_HINTS: Record<ModelId, string> = {
   wan: `Target model: Wan 2.1 (budget, fast).
-Best practices: Keep it direct and clear. 1–2 sentences max. Describe motion simply — no jargon. Focus on one strong primary motion. Atmospheric details should be minimal and literal (e.g. "light flickers", "smoke drifts").`,
+Best practices: Keep it direct and clear. 1–2 sentences max. Describe camera or subject motion simply. Do NOT add any objects, particles, fog, smoke, or effects not present in the original image.`,
 
   kling: `Target model: Kling O3 Standard (balanced quality).
-Best practices: Use cinematic language. 2–3 sentences. Include a primary camera/subject motion + one atmospheric layer. Terms like "parallax drift", "handheld sway", "rack focus", "bokeh shift" work well. Medium complexity.`,
+Best practices: Use cinematic camera language. 2 sentences. Describe a primary camera motion (dolly, pan, tilt, crane) and optionally a secondary motion from a subject already in the scene. Terms like "parallax drift", "handheld sway", "rack focus" work well. Do NOT invent atmospheric elements, particles, smoke, fog, or any objects not in the original image.`,
 
   veo3: `Target model: Veo 3.1 by Google DeepMind (premium, highest quality).
-Best practices: This model handles complex, layered descriptions excellently. 3–4 sentences. Include: primary motion, secondary environmental motion, atmospheric/lighting detail, and a physical texture note. Rich, specific language produces the best results.`,
+Best practices: Use precise cinematic language. 2–3 sentences. Describe camera motion and movement of existing scene elements only. Include a camera technique (rack focus, dolly, crane) and natural movement of subjects already visible. Do NOT add particles, smoke, fog, haze, lens flares, or any objects, creatures, or environmental elements not present in the original image.`,
 };
 
 async function fileToBase64(file: File): Promise<string> {
@@ -125,17 +126,17 @@ const FALLBACK_SUGGESTIONS: SuggestedPrompt[] = [
   {
     label: 'Slow Zoom In',
     description: 'The camera gently moves closer, drawing you into the scene.',
-    prompt: 'Slow dolly push into the scene, soft rack focus from mid-ground to foreground. Ambient light shifts warmly across surfaces.',
+    prompt: 'Slow dolly push into the scene, soft rack focus from mid-ground to foreground.',
   },
   {
     label: 'Gentle Drift',
     description: 'A subtle sideways drift reveals depth across the composition.',
-    prompt: 'Gentle lateral parallax drift from left to right, soft bokeh shifts in the background. Atmospheric haze catches directional light.',
+    prompt: 'Gentle lateral parallax drift from left to right, background slightly out of focus.',
   },
   {
     label: 'Rising Camera',
     description: 'The camera slowly lifts upward to reveal the full scene.',
-    prompt: 'Smooth upward crane movement revealing the full composition. Elements animate with staggered parallax, rim light catches edges with cinematic glow.',
+    prompt: 'Smooth upward crane movement revealing the full composition with natural parallax between foreground and background.',
   },
 ];
 
@@ -159,6 +160,8 @@ Base motion concept to adapt:
 "${basePrompt}"
 
 Rewrite this prompt respecting BOTH the model requirements AND the complexity level above. Keep the same core motion idea.
+
+CRITICAL CONSTRAINT: Do NOT add any objects, particles, smoke, fog, haze, dust, bokeh orbs, lens flares, animals, people, or any visual elements that were not in the original base concept. Only describe camera movement and motion of elements already described. If the base concept doesn't mention an element, do not introduce it.
 
 Output ONLY the optimized prompt text. No quotes, no label, no explanation.`,
       },
