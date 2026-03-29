@@ -19,7 +19,7 @@ import {
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateVideo, MODELS, type ModelId } from '@/lib/fal';
-import { analyzeImageForPrompts, tailorPromptForModel, type SuggestedPrompt, type Complexity } from '@/lib/gemini';
+import { analyzeImageForPrompts, tailorPromptForModel, type SuggestedPrompt, type Complexity, type ImageCategory } from '@/lib/gemini';
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -137,6 +137,17 @@ function GeneratingOverlay({
   );
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  ui:           'UI / Screen',
+  portrait:     'Portrait',
+  landscape:    'Landscape',
+  architecture: 'Architecture',
+  product:      'Product',
+  food:         'Food & Drink',
+  abstract:     'Abstract',
+  general:      'General',
+};
+
 const ACCEPTED_TYPES = [
   'image/jpeg',
   'image/jpg',
@@ -179,6 +190,7 @@ export default function CreatePage() {
   // AI suggestion state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestedPrompts, setSuggestedPrompts] = useState<SuggestedPrompt[]>([]);
+  const [imageCategory, setImageCategory] = useState<ImageCategory | null>(null);
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -211,6 +223,7 @@ export default function CreatePage() {
     setUploadProgress(0);
     setImageFile(file);
     setSuggestedPrompts([]);
+    setImageCategory(null);
     setSelectedSuggestion(null);
     setShowCustom(false);
     setPrompt('');
@@ -231,8 +244,9 @@ export default function CreatePage() {
     // Auto-analyze with AI
     setIsAnalyzing(true);
     try {
-      const suggestions = await analyzeImageForPrompts(file);
-      setSuggestedPrompts(suggestions);
+      const result = await analyzeImageForPrompts(file);
+      setImageCategory(result.category);
+      setSuggestedPrompts(result.suggestions);
       toast.success('AI analyzed your image ✨');
     } catch (err) {
       console.error('[analyzeImage error]', err);
@@ -265,10 +279,10 @@ export default function CreatePage() {
     if (file) processImage(file);
   };
 
-  const tailorAndSet = useCallback(async (basePrompt: string, model: ModelId, cmplx: Complexity) => {
+  const tailorAndSet = useCallback(async (basePrompt: string, model: ModelId, cmplx: Complexity, cat: ImageCategory | null) => {
     setIsTailoring(true);
     try {
-      const tailored = await tailorPromptForModel(basePrompt, model, cmplx);
+      const tailored = await tailorPromptForModel(basePrompt, model, cmplx, cat ?? 'general');
       setPrompt(tailored);
     } catch {
       setPrompt(basePrompt);
@@ -280,13 +294,13 @@ export default function CreatePage() {
   const handleSelectSuggestion = (index: number) => {
     setSelectedSuggestion(index);
     setShowCustom(false);
-    tailorAndSet(suggestedPrompts[index].prompt, modelId, complexity);
+    tailorAndSet(suggestedPrompts[index].prompt, modelId, complexity, imageCategory);
   };
 
   // Re-tailor when model or complexity changes and a suggestion is already selected
   useEffect(() => {
     if (selectedSuggestion === null || suggestedPrompts.length === 0) return;
-    tailorAndSet(suggestedPrompts[selectedSuggestion].prompt, modelId, complexity);
+    tailorAndSet(suggestedPrompts[selectedSuggestion].prompt, modelId, complexity, imageCategory);
   }, [modelId, complexity]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCustomPrompt = () => {
@@ -340,6 +354,7 @@ export default function CreatePage() {
     setImagePreview(null);
     setImageFile(null);
     setSuggestedPrompts([]);
+    setImageCategory(null);
     setSelectedSuggestion(null);
     setShowCustom(false);
     setPrompt('');
@@ -487,9 +502,16 @@ export default function CreatePage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-3"
                 >
-                  <div className="flex items-center gap-2 text-xs font-medium text-violet-400 uppercase tracking-wider">
-                    <Sparkles className="w-3 h-3" />
-                    Pick a motion style
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-medium text-violet-400 uppercase tracking-wider">
+                      <Sparkles className="w-3 h-3" />
+                      Pick a motion style
+                    </div>
+                    {imageCategory && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary border border-border text-muted-foreground capitalize">
+                        {CATEGORY_LABELS[imageCategory]}
+                      </span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 gap-2">
