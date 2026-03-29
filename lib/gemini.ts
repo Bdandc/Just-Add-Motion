@@ -1,8 +1,10 @@
 /// <reference types="vite/client" />
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type Schema } from '@google/genai';
 import type { ModelId } from './fal';
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ImageCategory =
   | 'ui'           // UI mockup, dashboard, app screen, wireframe, website
@@ -16,94 +18,145 @@ export type ImageCategory =
 
 export type Complexity = 'simple' | 'moderate' | 'complex';
 
-// ─── Category-specific motion rules ─────────────────────────────────────────
+export interface SuggestedPrompt {
+  label: string;
+  description: string; // shown to user — plain English
+  prompt: string;      // hidden — sent to video model
+}
 
-const CATEGORY_MOTION_RULES: Record<ImageCategory, string> = {
-  ui: `IMAGE TYPE: UI design, app mockup, dashboard, screen, or wireframe.
+export interface AnalysisResult {
+  category: ImageCategory;
+  suggestions: SuggestedPrompt[];
+}
 
-MOTION RULES — UI ONLY:
-- This is a FLAT 2D design. Do NOT use camera movement (no dolly, pan, zoom, crane).
-- Animate the UI elements themselves, exactly as they would behave in a real app:
-  * Data elements: numbers counting up to their final value, progress bars filling, charts/bars growing from zero
-  * Layout elements: cards or panels fading in sequentially, staggered from top to bottom
-  * Content: text lines revealing left-to-right, icons appearing with a subtle scale-in
-  * Interactive: a button or element pulsing once to draw attention
-- Each suggestion should animate a DIFFERENT part of the UI (e.g. one focuses on data, one on layout, one on a specific component)
-- Keep it plausible — animations should look like a real product demo or onboarding screen`,
+// ─── Category motion rules ────────────────────────────────────────────────────
+// Only ONE category's rules are sent per request (after classification).
+// Rules are injected into the system instruction, not the user message.
 
-  portrait: `IMAGE TYPE: Portrait, person, or human subject.
-
-MOTION RULES — PORTRAIT:
-- Focus on natural, believable human motion: hair moving gently, clothing shifting, a subtle breath
-- Camera moves should be slow and controlled: a gentle push in, a slow drift to one side
-- Avoid dramatic movement — keep it intimate and realistic
-- Do NOT add any objects, backgrounds, or elements not already in the image`,
-
-  landscape: `IMAGE TYPE: Landscape, outdoor scene, or environment.
-
-MOTION RULES — LANDSCAPE:
-- Use camera movement as the primary technique: dolly, upward crane, slow pan, parallax drift
-- Only animate elements already clearly visible in the scene — if there are trees, they can sway; if there is water, it can ripple; if there are clouds, they can drift
-- Do NOT invent environmental elements not present in the image`,
-
-  architecture: `IMAGE TYPE: Architecture, building, or interior scene.
-
-MOTION RULES — ARCHITECTURE:
-- Use slow, deliberate camera movements: a gradual reveal crane up, a slow dolly through a space, a subtle pan across a facade
-- Lighting shifts should only enhance what is already there — not add new light sources
-- Do NOT add people, objects, or environmental elements not present`,
-
-  product: `IMAGE TYPE: Product or object photography.
-
-MOTION RULES — PRODUCT:
-- Suggest subtle rotational or orbital movement, a slow zoom into a detail, or a gentle hover effect
-- Motion should showcase the product — reveal a texture, emphasise a shape
-- Do NOT add props, backgrounds, or supporting objects not already in the image`,
-
-  food: `IMAGE TYPE: Food or drink photography.
-
-MOTION RULES — FOOD:
-- Use slow zoom into texture or detail, a gentle overhead drift, or a subtle tilt reveal
-- Only animate elements clearly present — if there is steam, it can rise; if there is liquid, it can settle
-- Do NOT invent steam, condensation, or any element not visible`,
-
-  abstract: `IMAGE TYPE: Abstract art, texture, pattern, or graphic.
-
-MOTION RULES — ABSTRACT:
-- Use slow zoom, gentle drift, subtle rotation, or a parallax shift between layers
-- Let the existing shapes, colours, and forms drive the motion
-- Do NOT add any new shapes or graphic elements`,
-
-  general: `IMAGE TYPE: General image.
+const CATEGORY_RULES: Record<ImageCategory, string> = {
+  ui: `This image is a UI design, app screen, dashboard, or wireframe.
 
 MOTION RULES:
-- Use camera movement (dolly, pan, crane) or animate elements already present in the scene
-- Choose motions appropriate to the mood and composition of the specific image
-- Do NOT add any objects, particles, or environmental elements not already visible`,
+- This is a flat 2D design. Camera movement (dolly, pan, zoom, crane) is NOT allowed.
+- Animate only the UI elements that are visibly present in the image.
+- Valid motion types: elements fading in sequentially, numbers counting up to a displayed value, chart bars or graphs growing from zero, progress bars filling, cards or panels sliding in, text lines revealing, icons doing a scale-in.
+- Each of the 3 suggestions must animate a DIFFERENT part of the UI.
+- Prompts must read like a product demo or app onboarding — no cinematic language.
+- Do not reference any element that is not clearly visible in the image.`,
+
+  portrait: `This image is a portrait or photograph of a person.
+
+MOTION RULES:
+- Animate only what is visible: natural human motion (hair, clothing, a breath).
+- Camera moves must be slow and controlled: a gentle push in, a slow drift to one side.
+- Do not add or invent any objects, backgrounds, or elements not already in the image.
+- No dramatic movement — keep it intimate and believable.`,
+
+  landscape: `This image is an outdoor landscape, nature scene, or environment.
+
+MOTION RULES:
+- Use camera movement as the primary technique: slow dolly, upward crane, lateral pan, parallax drift.
+- Secondary motion must only reference elements clearly visible in the image. Trees sway only if trees are present. Water ripples only if water is present. Do not invent these.
+- Do not add fog, mist, particles, lens flares, or any element not in the image.`,
+
+  architecture: `This image is an architectural exterior or interior scene.
+
+MOTION RULES:
+- Use slow, deliberate camera movements: gradual crane up, slow dolly through a space, subtle pan across a facade.
+- Do not add people, vehicles, objects, light sources, or environmental elements not already present.
+- No invented atmospheric effects.`,
+
+  product: `This image is a product or object photograph.
+
+MOTION RULES:
+- Suggest subtle orbital movement, a slow zoom into a texture or detail, or a gentle hover.
+- Motion must showcase what is already in the image — do not add props, surfaces, or supporting objects.
+- Keep movement minimal and elegant.`,
+
+  food: `This image is a food or drink photograph.
+
+MOTION RULES:
+- Use slow zoom into visible texture or detail, a gentle overhead drift, or a tilt reveal.
+- Secondary motion must only reference what is visible — steam only if steam is present, liquid only if liquid is present.
+- Do not invent condensation, steam, bubbles, or any element not clearly visible.`,
+
+  abstract: `This image is abstract art, a texture, a pattern, or a graphic.
+
+MOTION RULES:
+- Use slow zoom, gentle drift, subtle rotation, or parallax between visible layers.
+- Refer only to existing shapes, colours, and forms in the image.
+- Do not add new shapes, particles, or graphic elements.`,
+
+  general: `This image does not fit a specific category.
+
+MOTION RULES:
+- Use camera movement or animate elements that are clearly present in the scene.
+- Choose motion appropriate to the mood and composition of this specific image.
+- Do not add any objects, particles, or environmental elements not already visible.`,
 };
 
-// ─── Complexity modifiers (category-aware) ───────────────────────────────────
+// ─── Complexity hints — branched by category type ─────────────────────────────
 
-const COMPLEXITY_HINTS: Record<Complexity, string> = {
-  simple:
-    'Complexity: SIMPLE. One single motion only. 1 sentence.',
-  moderate:
-    'Complexity: MODERATE. A primary motion plus one secondary motion from an element already present. 1–2 sentences.',
-  complex:
-    'Complexity: COMPLEX. A primary motion, a secondary motion from an existing element, and a specific technique detail. 2–3 sentences. Still no invented elements.',
+type CategoryType = 'ui' | 'cinematic';
+
+function getCategoryType(cat: ImageCategory): CategoryType {
+  return cat === 'ui' ? 'ui' : 'cinematic';
+}
+
+const COMPLEXITY_HINTS: Record<CategoryType, Record<Complexity, string>> = {
+  ui: {
+    simple:   'COMPLEXITY: SIMPLE. Animate one UI element only. One action. 1 sentence.',
+    moderate: 'COMPLEXITY: MODERATE. Animate 2–3 UI elements with light sequencing. 1–2 sentences.',
+    complex:  'COMPLEXITY: COMPLEX. Animate multiple UI components with staggered timing. 2–3 sentences. Reference only elements visible in the image.',
+  },
+  cinematic: {
+    simple:   'COMPLEXITY: SIMPLE. One camera motion only. 1 sentence.',
+    moderate: 'COMPLEXITY: MODERATE. One camera motion plus one secondary motion from an element already present. 1–2 sentences.',
+    complex:  'COMPLEXITY: COMPLEX. A primary camera motion, a secondary motion from an existing element, and a specific technique (rack focus, parallax). 2–3 sentences.',
+  },
 };
 
-// ─── Per-model tailoring (no new elements allowed) ───────────────────────────
+// ─── Model vocabulary hints ───────────────────────────────────────────────────
+// These only adjust sentence count and vocabulary — not the content of the motion.
 
-const MODEL_HINTS: Record<ModelId, string> = {
-  wan: `Target model: Wan 2.1 (budget, fast).
-Style: Direct and clear. 1–2 sentences max. Simple motion language. Do NOT add any objects, particles, fog, smoke, or effects not in the base prompt.`,
+const MODEL_VOCAB: Record<ModelId, string> = {
+  wan:   'Target: Wan 2.1. Style: plain and direct. Max 1–2 short sentences. Avoid jargon.',
+  kling: 'Target: Kling O3. Style: cinematic language allowed. Max 2 sentences. Terms like "parallax drift", "rack focus", "handheld sway" work well.',
+  veo3:  'Target: Veo 3.1. Style: precise and specific. Max 3 sentences. Include a named camera technique.',
+};
 
-  kling: `Target model: Kling O3 Standard (balanced quality).
-Style: Cinematic language. Up to 2 sentences. Primary motion + optional secondary from existing elements only. Terms like "parallax drift", "handheld sway", "rack focus" work well. Do NOT invent atmospheric or environmental elements.`,
+// ─── JSON schemas for structured output ──────────────────────────────────────
 
-  veo3: `Target model: Veo 3.1 by Google DeepMind (premium quality).
-Style: Precise and specific. Up to 3 sentences. Primary motion, secondary motion from existing subjects, and a camera technique. Do NOT add particles, smoke, fog, haze, lens flares, or any elements not in the base prompt.`,
+const CLASSIFICATION_SCHEMA: Schema = {
+  type: 'object' as const,
+  properties: {
+    category: {
+      type: 'string' as const,
+      enum: ['ui', 'portrait', 'landscape', 'architecture', 'product', 'food', 'abstract', 'general'],
+    },
+  },
+  required: ['category'],
+};
+
+const SUGGESTIONS_SCHEMA: Schema = {
+  type: 'object' as const,
+  properties: {
+    suggestions: {
+      type: 'array' as const,
+      items: {
+        type: 'object' as const,
+        properties: {
+          label:       { type: 'string' as const },
+          description: { type: 'string' as const },
+          prompt:      { type: 'string' as const },
+        },
+        required: ['label', 'description', 'prompt'],
+      },
+      minItems: 3,
+      maxItems: 3,
+    },
+  },
+  required: ['suggestions'],
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -117,112 +170,113 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export interface SuggestedPrompt {
-  label: string;
-  description: string; // shown to user — plain English
-  prompt: string;      // hidden — technical base prompt, gets tailored per model
-}
+// ─── Step 1a: Classify the image (fast, cheap, one word) ─────────────────────
 
-export interface AnalysisResult {
-  category: ImageCategory;
-  suggestions: SuggestedPrompt[];
-}
-
-// ─── Step 1: Classify + suggest ──────────────────────────────────────────────
-
-const ANALYSIS_SYSTEM = `You are an expert at analyzing images and writing motion prompts for AI image-to-video generation.
-
-Your task has two parts:
-1. Classify what type of image this is.
-2. Generate 3 motion style suggestions appropriate for that image type.
-
-Classification categories:
-- "ui"           — UI mockup, app screen, dashboard, website, wireframe, prototype
+async function classifyImage(base64: string, mimeType: string): Promise<ImageCategory> {
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: 'Classify this image into exactly one category.' },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction: `You classify images into exactly one of these categories:
+- "ui"           — UI design, app screen, dashboard, website, wireframe, prototype
 - "portrait"     — person, face, headshot, group of people
 - "landscape"    — outdoor scene, nature, sky, environment, cityscape
 - "architecture" — building, interior, room, structural space
-- "product"      — product, object, item isolated or on a surface
+- "product"      — product or object isolated or on a plain surface
 - "food"         — food, drink, meal, ingredients
 - "abstract"     — abstract art, texture, pattern, graphic, illustration
 - "general"      — anything that does not clearly fit the above
 
-For each suggestion provide:
-- "label": 2–4 word plain-English title (e.g. "Numbers Count Up", "Slow Zoom In")
-- "description": 1 sentence describing what the viewer sees — no jargon
-- "prompt": the technical motion prompt sent to the video model — NOT shown to the user
+Respond with JSON only.`,
+      temperature: 0.1,
+      responseMimeType: 'application/json',
+      responseSchema: CLASSIFICATION_SCHEMA,
+    },
+  });
 
-STRICT RULES for the technical prompt:
-- Follow the motion rules for the detected category (see below)
-- NEVER invent objects, particles, smoke, fog, bokeh, lens flares, animals, people, or any element not clearly present in the image
-- Describe ONLY motion — do not change the content of the scene
+  try {
+    const parsed = JSON.parse(response.text ?? '{}') as { category?: string };
+    return (parsed.category ?? 'general') as ImageCategory;
+  } catch {
+    return 'general';
+  }
+}
 
-Respond ONLY with valid JSON in exactly this shape. No markdown, no backticks, no explanation:
-{
-  "category": "<category>",
-  "suggestions": [
-    { "label": "...", "description": "...", "prompt": "..." },
-    { "label": "...", "description": "...", "prompt": "..." },
-    { "label": "...", "description": "...", "prompt": "..." }
-  ]
-}`;
+// ─── Step 1b: Generate suggestions for the classified category ───────────────
+
+async function generateSuggestions(
+  base64: string,
+  mimeType: string,
+  category: ImageCategory
+): Promise<SuggestedPrompt[]> {
+  const rules = CATEGORY_RULES[category];
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: 'Generate 3 motion style suggestions for this image. Respond with JSON only.' },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction: `You write motion prompts for an AI image-to-video generator.
+
+${rules}
+
+ABSOLUTE CONSTRAINT: Do not invent, add, or imply any object, element, particle, effect, creature, or environmental detail that is not clearly and visibly present in the image. If you cannot see it, do not write it.
+
+For each suggestion:
+- "label": 2–4 word plain-English title the viewer understands (e.g. "Numbers Count Up", "Slow Zoom In")
+- "description": 1 plain-English sentence describing what the viewer will see. No jargon.
+- "prompt": the technical motion instruction sent directly to the video model. Reference only what is visibly in the image. Be specific and concise.
+
+The 3 suggestions must each describe a meaningfully different motion approach.`,
+      temperature: 0.3,
+      responseMimeType: 'application/json',
+      responseSchema: SUGGESTIONS_SCHEMA,
+    },
+  });
+
+  try {
+    const parsed = JSON.parse(response.text ?? '{}') as { suggestions?: Partial<SuggestedPrompt>[] };
+    const list = parsed.suggestions ?? [];
+    if (list.length === 0) throw new Error('Empty suggestions');
+    return list.slice(0, 3).map((s, i) => ({
+      label: s.label ?? `Motion ${i + 1}`,
+      description: s.description ?? '',
+      prompt: s.prompt ?? '',
+    }));
+  } catch {
+    return FALLBACK_RESULT.suggestions;
+  }
+}
+
+// ─── Public: Classify + suggest ──────────────────────────────────────────────
 
 export async function analyzeImageForPrompts(imageFile: File): Promise<AnalysisResult> {
   const base64 = await fileToBase64(imageFile);
   const mimeType = imageFile.type || 'image/jpeg';
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: [
-      { inlineData: { mimeType, data: base64 } },
-      {
-        text: `Classify this image and generate 3 motion suggestions.
+  // Two focused calls: classify first, then generate with only the matching rules
+  const category = await classifyImage(base64, mimeType);
+  console.log('[gemini] classified as:', category);
 
-After classifying, apply these motion rules for the detected category:
+  const suggestions = await generateSuggestions(base64, mimeType, category);
+  console.log('[gemini] suggestions:', suggestions);
 
-${Object.entries(CATEGORY_MOTION_RULES).map(([k, v]) => `--- ${k.toUpperCase()} ---\n${v}`).join('\n\n')}
-
-Now analyze the image, determine the correct category, and generate 3 suggestions using the rules for that category.`,
-      },
-    ],
-    config: {
-      systemInstruction: ANALYSIS_SYSTEM,
-      temperature: 0.8,
-      maxOutputTokens: 1000,
-    },
-  });
-
-  const text = response.text?.trim();
-  console.log('[gemini] raw response:', text);
-  if (!text) throw new Error('Gemini returned an empty response');
-
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) {
-    console.error('[gemini] No JSON object found:', text);
-    return FALLBACK_RESULT;
-  }
-
-  try {
-    const parsed = JSON.parse(text.slice(start, end + 1)) as {
-      category?: string;
-      suggestions?: Partial<SuggestedPrompt>[];
-    };
-
-    const category = (parsed.category ?? 'general') as ImageCategory;
-    const suggestions = (parsed.suggestions ?? []).slice(0, 3).map((s, i) => ({
-      label: s.label ?? `Motion ${i + 1}`,
-      description: s.description ?? s.prompt?.slice(0, 80) ?? 'A motion through the scene.',
-      prompt: s.prompt ?? s.description ?? '',
-    }));
-
-    if (suggestions.length === 0) throw new Error('Empty suggestions');
-
-    console.log('[gemini] category:', category, '| suggestions:', suggestions);
-    return { category, suggestions };
-  } catch (e) {
-    console.error('[gemini] JSON parse failed:', e);
-    return FALLBACK_RESULT;
-  }
+  return { category, suggestions };
 }
 
 const FALLBACK_RESULT: AnalysisResult = {
@@ -236,17 +290,19 @@ const FALLBACK_RESULT: AnalysisResult = {
     {
       label: 'Gentle Drift',
       description: 'A subtle sideways drift reveals depth across the composition.',
-      prompt: 'Gentle lateral parallax drift from left to right, background slightly out of focus.',
+      prompt: 'Gentle lateral parallax drift from left to right.',
     },
     {
       label: 'Rising Camera',
       description: 'The camera slowly lifts upward to reveal the full scene.',
-      prompt: 'Smooth upward crane movement revealing the full composition with natural parallax.',
+      prompt: 'Smooth upward crane movement revealing the full composition.',
     },
   ],
 };
 
-// ─── Step 2: Tailor for model + complexity ────────────────────────────────────
+// ─── Step 2: Adapt prompt for model + complexity ──────────────────────────────
+// No image here — only adapts vocabulary and sentence structure.
+// Does NOT add new content.
 
 export async function tailorPromptForModel(
   basePrompt: string,
@@ -254,30 +310,36 @@ export async function tailorPromptForModel(
   complexity: Complexity = 'moderate',
   category: ImageCategory = 'general'
 ): Promise<string> {
+  const catType = getCategoryType(category);
+  const complexityHint = COMPLEXITY_HINTS[catType][complexity];
+  const modelVocab = MODEL_VOCAB[modelId];
+
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: [
       {
-        text: `You are an expert at writing prompts for AI image-to-video generation models.
+        role: 'user',
+        parts: [
+          {
+            text: `Adapt this motion prompt for a specific model and complexity level.
 
-${MODEL_HINTS[modelId]}
-
-${COMPLEXITY_HINTS[complexity]}
-
-The source image was classified as: ${category.toUpperCase()}
-${CATEGORY_MOTION_RULES[category]}
-
-Base motion concept to adapt:
+Base prompt:
 "${basePrompt}"
 
-Rewrite this prompt respecting the model style, complexity level, and category motion rules above. Keep the same core motion idea.
+${modelVocab}
+${complexityHint}
 
-CRITICAL: Do NOT add any objects, particles, smoke, fog, haze, bokeh orbs, lens flares, or any visual elements not already described in the base concept.
+RULES:
+- Keep the same motion concept. Do not introduce any new motion ideas.
+- Only adjust: sentence count, sentence length, and technical vocabulary.
+- Do not add any objects, effects, elements, or actions not already present in the base prompt.
 
-Output ONLY the optimized prompt. No quotes, no label, no explanation.`,
+Output the adapted prompt only. No quotes, no labels, no explanation.`,
+          },
+        ],
       },
     ],
-    config: { temperature: 0.7, maxOutputTokens: 400 },
+    config: { temperature: 0.2, maxOutputTokens: 300 },
   });
 
   return response.text?.trim() ?? basePrompt;
@@ -293,18 +355,22 @@ export async function refineMotionPrompt(
     model: 'gemini-2.5-flash',
     contents: [
       {
-        text: `You are a motion prompt engineer for AI image-to-video models.
+        role: 'user',
+        parts: [
+          {
+            text: `Adjust this motion prompt based on the user's instruction.
 
 Current prompt: "${currentPrompt}"
+User instruction: "${editInstruction}"
 
-User edit request: "${editInstruction}"
+Apply the instruction. Do not add any objects or elements not already in the current prompt.
 
-Rewrite the prompt incorporating the edit. Keep the same cinematic style. Do NOT add any new objects or elements not already mentioned.
-
-Output ONLY the refined prompt — no quotes, no explanation.`,
+Output the adjusted prompt only. No quotes, no explanation.`,
+          },
+        ],
       },
     ],
-    config: { temperature: 0.8, maxOutputTokens: 300 },
+    config: { temperature: 0.3, maxOutputTokens: 300 },
   });
 
   const text = response.text?.trim();

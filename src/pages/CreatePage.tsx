@@ -558,9 +558,13 @@ export default function CreatePage() {
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Animation complexity</p>
                     <div className="grid grid-cols-3 gap-1.5">
-                      {([
+                      {(imageCategory === 'ui' ? [
+                        { id: 'simple',   label: 'Simple',   desc: '1 element animates' },
+                        { id: 'moderate', label: 'Moderate', desc: '2–3 elements' },
+                        { id: 'complex',  label: 'Complex',  desc: 'Staggered sequence' },
+                      ] : [
                         { id: 'simple',   label: 'Simple',   desc: 'One clean motion' },
-                        { id: 'moderate', label: 'Moderate', desc: 'Motion + atmosphere' },
+                        { id: 'moderate', label: 'Moderate', desc: 'Motion + detail' },
                         { id: 'complex',  label: 'Complex',  desc: 'Layered & cinematic' },
                       ] as const).map((c) => (
                         <button
