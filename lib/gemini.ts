@@ -161,13 +161,9 @@ const SUGGESTIONS_SCHEMA: Schema = {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+/** Extract the raw base64 payload from a data URL (e.g. from FileReader result). */
+export function dataUrlToBase64(dataUrl: string): string {
+  return dataUrl.split(',')[1];
 }
 
 // ─── Step 1a: Classify the image (fast, cheap, one word) ─────────────────────
@@ -265,11 +261,11 @@ The 3 suggestions must each describe a meaningfully different motion approach.`,
 
 // ─── Public: Classify + suggest ──────────────────────────────────────────────
 
-export async function analyzeImageForPrompts(imageFile: File): Promise<AnalysisResult> {
-  const base64 = await fileToBase64(imageFile);
-  const mimeType = imageFile.type || 'image/jpeg';
-
-  // Two focused calls: classify first, then generate with only the matching rules
+/**
+ * Accepts pre-computed base64 (from the FileReader already used for the image
+ * preview) so the file is never read twice.
+ */
+export async function analyzeImageForPrompts(base64: string, mimeType: string): Promise<AnalysisResult> {
   const category = await classifyImage(base64, mimeType);
   console.log('[gemini] classified as:', category);
 

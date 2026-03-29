@@ -12,6 +12,7 @@ import {
   Maximize2,
   X,
 } from 'lucide-react';
+import GeneratingOverlay from '@/src/components/GeneratingOverlay';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateVideo, MODELS, type ModelId } from '@/lib/fal';
@@ -149,24 +150,7 @@ export default function PreviewPage() {
           transition={{ duration: 0.5 }}
           className="relative rounded-2xl overflow-hidden bg-black border border-border group"
         >
-          {isGenerating && (
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-10 gap-4">
-              <div className="relative">
-                <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 text-primary" />
-              </div>
-              <p className="text-sm font-medium text-white animate-pulse">{generatingStatus || 'Generating...'}</p>
-              <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ x: '-100%' }}
-                  animate={{ x: '100%' }}
-                  transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
-                  className="h-full w-1/2 bg-primary"
-                />
-              </div>
-            </div>
-          )}
-
+  
           <video
             ref={videoRef}
             key={videoUrl}
@@ -245,7 +229,7 @@ export default function PreviewPage() {
             {/* Edit instruction */}
             <div className="space-y-2">
               <textarea
-                placeholder="What to change? e.g. make it slower, add fog, zoom out more..."
+                placeholder="What to change? e.g. make it slower, zoom out more, pan left instead, hold on the subject longer..."
                 value={refineInstruction}
                 onChange={(e) => setRefineInstruction(e.target.value)}
                 rows={3}
@@ -268,6 +252,17 @@ export default function PreviewPage() {
           </motion.div>
         </div>
       </div>
+
+      {/* Full-screen generating overlay */}
+      <AnimatePresence>
+        {isGenerating && (
+          <GeneratingOverlay
+            status={generatingStatus}
+            imagePreview={state.imageDataUrl}
+            modelId={state.modelId}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Lightbox */}
       <AnimatePresence>
