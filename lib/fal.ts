@@ -35,8 +35,8 @@ export const MODELS: ModelOption[] = [
   },
   {
     id: 'kling',
-    falId: 'fal-ai/kling-video/o3/standard/image-to-video',
-    name: 'Kling 3.0',
+    falId: 'fal-ai/kling-video/v1.6/standard/image-to-video',
+    name: 'Kling 1.6',
     tier: 'balanced',
     tierLabel: 'Balanced',
     costPer4s: '~$0.11',
@@ -47,8 +47,8 @@ export const MODELS: ModelOption[] = [
   },
   {
     id: 'veo3',
-    falId: 'fal-ai/veo3.1/image-to-video',
-    name: 'Veo 3.1 Fast',
+    falId: 'fal-ai/veo3/fast/image-to-video',
+    name: 'Veo 3 Fast',
     tier: 'premium',
     tierLabel: 'Premium',
     costPer4s: '~$0.40',
