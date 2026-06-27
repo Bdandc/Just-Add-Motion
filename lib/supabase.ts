@@ -14,5 +14,8 @@ export interface Generation {
   duration: string;
   video_url: string | null;
   status: 'complete' | 'failed';
+  // Pending migration (project paused): inserts omit these until the columns exist.
+  seed?: number | null;
+  aspect_ratio?: string | null;
   created_at: string;
 }

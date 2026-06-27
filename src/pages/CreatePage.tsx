@@ -56,6 +56,25 @@ function dataUrlToFile(dataUrl: string, filename = 'image.jpg'): File {
   return new File([bytes], filename, { type: mime });
 }
 
+function QualityToggle({ active, onClick, title, desc }: { active: boolean; onClick: () => void; title: string; desc: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+        active ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-border bg-secondary/40 hover:border-primary/30'
+      }`}
+    >
+      <div className={`mt-0.5 w-9 h-5 rounded-full flex-shrink-0 transition-colors relative ${active ? 'bg-primary' : 'bg-muted'}`}>
+        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${active ? 'left-[18px]' : 'left-0.5'}`} />
+      </div>
+      <div className="min-w-0">
+        <p className={`text-sm font-semibold ${active ? 'text-foreground' : 'text-foreground/80'}`}>{title}</p>
+        <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
+      </div>
+    </button>
+  );
+}
+
 export default function CreatePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -67,6 +86,9 @@ export default function CreatePage() {
   const [duration, setDuration] = useState<'4s' | '6s' | '8s'>('4s');
   const [modelId, setModelId] = useState<ModelId>('kling');
   const [complexity, setComplexity] = useState<Complexity>('moderate');
+  const [enhanceSource, setEnhanceSource] = useState(true);
+  const [polish, setPolish] = useState(false);
+  const [audio, setAudio] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingStatus, setGeneratingStatus] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -124,7 +146,7 @@ export default function CreatePage() {
       setIsUploading(false);
       setUploadProgress(100);
 
-      // Reuse the base64 already decoded by the FileReader — no second read
+      // Reuse the base64 already decoded by the FileReader (no second read)
       const base64 = dataUrlToBase64(dataUrl);
       setIsAnalyzing(true);
       try {
@@ -134,7 +156,7 @@ export default function CreatePage() {
         toast.success('AI analyzed your image ✨');
       } catch (err) {
         console.error('[analyzeImage error]', err);
-        toast.error('AI analysis failed — you can write your own prompt below');
+        toast.error('AI analysis failed. You can write your own prompt below');
         setShowCustom(true);
       } finally {
         setIsAnalyzing(false);
@@ -210,7 +232,7 @@ export default function CreatePage() {
 
     try {
       const result = await generateVideo(
-        { imageFile, prompt, duration, modelId },
+        { imageFile, prompt, duration, modelId, upscaleInput: enhanceSource, polish, generateAudio: audio },
         (status) => setGeneratingStatus(status)
       );
       if (user) {
@@ -221,6 +243,8 @@ export default function CreatePage() {
           duration,
           video_url: result.videoUrl,
           status: 'complete',
+          // seed + aspect_ratio omitted until the generations migration lands
+          // (project paused, free-tier slot cap). Seed still flows via nav state.
         });
       }
       navigate('/preview', {
@@ -230,6 +254,10 @@ export default function CreatePage() {
           prompt,
           modelId,
           duration,
+          seed: result.seed,
+          enhanceSource,
+          polish,
+          audio,
         },
       });
     } catch (err) {
@@ -509,7 +537,7 @@ export default function CreatePage() {
                       animate={{ opacity: 1, height: 'auto' }}
                     >
                       <Textarea
-                        placeholder="Describe the motion you want — e.g. slow cinematic zoom in, dust particles floating upward..."
+                        placeholder="Describe the motion you want. e.g. slow cinematic zoom in, dust particles floating upward..."
                         className="min-h-[120px] bg-secondary/50 border-border resize-none text-base p-4 focus:ring-primary"
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
@@ -521,7 +549,7 @@ export default function CreatePage() {
                 </motion.div>
               )}
 
-              {/* Empty state — no image uploaded yet */}
+              {/* Empty state: no image uploaded yet */}
               {!isAnalyzing && suggestedPrompts.length === 0 && !imageFile && (
                 <motion.div
                   key="empty"
@@ -590,7 +618,34 @@ export default function CreatePage() {
             </div>
           </div>
 
-          {/* Prompt preview — shows the tailored prompt that will be sent to the model */}
+          {/* Section 5: Quality */}
+          <div className="space-y-3">
+            <Label className="text-lg font-bold">5. Quality</Label>
+            <div className="space-y-2">
+              <QualityToggle
+                active={enhanceSource}
+                onClick={() => setEnhanceSource((v) => !v)}
+                title="Enhance source"
+                desc="Upscale and sharpen your image before animating. Biggest quality boost (~$0.04)."
+              />
+              <QualityToggle
+                active={polish}
+                onClick={() => setPolish((v) => !v)}
+                title="Polish output"
+                desc="Upscale the video 2x and smooth to 60fps. Adds cost and render time."
+              />
+              {modelId === 'veo3' && (
+                <QualityToggle
+                  active={audio}
+                  onClick={() => setAudio((v) => !v)}
+                  title="Generate audio"
+                  desc="Veo 3.1 native soundtrack. Doubles the Veo cost."
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Prompt preview: shows the tailored prompt that will be sent to the model */}
           <AnimatePresence>
             {prompt && !isTailoring && (
               <motion.div

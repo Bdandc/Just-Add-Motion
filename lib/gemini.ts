@@ -120,8 +120,8 @@ const COMPLEXITY_HINTS: Record<CategoryType, Record<Complexity, string>> = {
 // These only adjust sentence count and vocabulary — not the content of the motion.
 
 const MODEL_VOCAB: Record<ModelId, string> = {
-  wan:   'Target: Wan 2.1. Style: plain and direct. Max 1–2 short sentences. Avoid jargon.',
-  kling: 'Target: Kling O3. Style: cinematic language allowed. Max 2 sentences. Terms like "parallax drift", "rack focus", "handheld sway" work well.',
+  wan:   'Target: Wan 2.2. Style: plain and direct. Max 1–2 short sentences. Avoid jargon.',
+  kling: 'Target: Kling 2.5 Turbo. Style: cinematic language allowed. Max 2 sentences. Terms like "parallax drift", "rack focus", "handheld sway" work well.',
   veo3:  'Target: Veo 3.1. Style: precise and specific. Max 3 sentences. Include a named camera technique.',
 };
 
