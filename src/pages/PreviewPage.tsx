@@ -67,6 +67,8 @@ export default function PreviewPage() {
   }
 
   const model = MODELS.find(m => m.id === state.modelId);
+  // Only Veo + Wan accept a seed; Kling ignores it, so seed lock is meaningless there.
+  const seedSupported = state.modelId === 'veo3' || state.modelId === 'wan';
 
   const handleDownload = async () => {
     try {
@@ -215,15 +217,17 @@ export default function PreviewPage() {
           >
             <Dices className="w-4 h-4 mr-2" /> Reroll
           </Button>
-          <Button
-            variant="outline"
-            className={`h-11 px-5 ${lockSeed ? 'border-primary text-primary' : ''}`}
-            onClick={() => setLockSeed((v) => !v)}
-            title={lockSeed ? 'Seed locked: regenerations keep this motion' : 'Lock the seed to keep this motion across regenerations'}
-          >
-            {lockSeed ? <Lock className="w-4 h-4 mr-2" /> : <LockOpen className="w-4 h-4 mr-2" />}
-            {lockSeed ? 'Seed locked' : 'Lock seed'}
-          </Button>
+          {seedSupported && (
+            <Button
+              variant="outline"
+              className={`h-11 px-5 ${lockSeed ? 'border-primary text-primary' : ''}`}
+              onClick={() => setLockSeed((v) => !v)}
+              title={lockSeed ? 'Seed locked: regenerations keep this motion' : 'Lock the seed to keep this motion across regenerations'}
+            >
+              {lockSeed ? <Lock className="w-4 h-4 mr-2" /> : <LockOpen className="w-4 h-4 mr-2" />}
+              {lockSeed ? 'Seed locked' : 'Lock seed'}
+            </Button>
+          )}
           <Button
             variant="outline"
             className="h-11 px-5"
