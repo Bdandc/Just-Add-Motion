@@ -11,6 +11,9 @@ import {
   SlidersHorizontal,
   Maximize2,
   X,
+  Dices,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import GeneratingOverlay from '@/src/components/GeneratingOverlay';
 import { toast } from 'sonner';
@@ -26,6 +29,10 @@ interface PreviewState {
   prompt: string;
   modelId: ModelId;
   duration: '4s' | '6s' | '8s';
+  seed?: number;
+  enhanceSource?: boolean;
+  polish?: boolean;
+  audio?: boolean;
 }
 
 function dataUrlToFile(dataUrl: string, filename = 'image.jpg'): File {
@@ -49,6 +56,8 @@ export default function PreviewPage() {
   const [isRefining, setIsRefining] = useState(false);
   const [refineInstruction, setRefineInstruction] = useState('');
   const [lightbox, setLightbox] = useState(false);
+  const [seed, setSeed] = useState<number | undefined>(state?.seed);
+  const [lockSeed, setLockSeed] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // No state = direct navigation, send back to create
@@ -58,6 +67,8 @@ export default function PreviewPage() {
   }
 
   const model = MODELS.find(m => m.id === state.modelId);
+  // Only Veo + Wan accept a seed; Kling ignores it, so seed lock is meaningless there.
+  const seedSupported = state.modelId === 'veo3' || state.modelId === 'wan';
 
   const handleDownload = async () => {
     try {
@@ -70,7 +81,49 @@ export default function PreviewPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error('Download failed — try right-clicking the video to save');
+      toast.error('Download failed. Try right-clicking the video to save');
+    }
+  };
+
+  const runGeneration = async (promptToUse: string, seedToUse: number | undefined) => {
+    setIsGenerating(true);
+    setGeneratingStatus('Starting...');
+    try {
+      const imageFile = dataUrlToFile(state.imageDataUrl);
+      const result = await generateVideo(
+        {
+          imageFile,
+          prompt: promptToUse,
+          duration: state.duration,
+          modelId: state.modelId,
+          upscaleInput: state.enhanceSource ?? true,
+          polish: state.polish ?? false,
+          generateAudio: state.audio ?? false,
+          seed: seedToUse,
+        },
+        (status) => setGeneratingStatus(status)
+      );
+      setVideoUrl(result.videoUrl);
+      setSeed(result.seed);
+      toast.success('New version ready!');
+      if (user) {
+        await supabase.from('generations').insert({
+          user_id: user.id,
+          prompt: promptToUse,
+          model_id: state.modelId,
+          duration: state.duration,
+          video_url: result.videoUrl,
+          status: 'complete',
+          // seed + aspect_ratio omitted until the generations migration lands
+          // (project paused, free-tier slot cap). Seed still flows via nav state.
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Generation failed: ${msg}`);
+    } finally {
+      setIsGenerating(false);
+      setGeneratingStatus('');
     }
   };
 
@@ -82,42 +135,18 @@ export default function PreviewPage() {
       refinedPrompt = await refineMotionPrompt(prompt, refineInstruction);
       setPrompt(refinedPrompt);
       setRefineInstruction('');
-      toast.success('Prompt refined — regenerating...');
+      toast.success('Prompt refined. Regenerating...');
     } catch {
-      toast.error('Refinement failed — regenerating with original prompt');
+      toast.error('Refinement failed. Regenerating with original prompt');
     } finally {
       setIsRefining(false);
     }
-
-    // Regenerate with refined prompt
-    setIsGenerating(true);
-    setGeneratingStatus('Starting...');
-    try {
-      const imageFile = dataUrlToFile(state.imageDataUrl);
-      const result = await generateVideo(
-        { imageFile, prompt: refinedPrompt, duration: state.duration, modelId: state.modelId },
-        (status) => setGeneratingStatus(status)
-      );
-      setVideoUrl(result.videoUrl);
-      toast.success('New version ready!');
-      if (user) {
-        await supabase.from('generations').insert({
-          user_id: user.id,
-          prompt: refinedPrompt,
-          model_id: state.modelId,
-          duration: state.duration,
-          video_url: result.videoUrl,
-          status: 'complete',
-        });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Generation failed: ${msg}`);
-    } finally {
-      setIsGenerating(false);
-      setGeneratingStatus('');
-    }
+    // Lock keeps the motion (same seed); otherwise a fresh seed for variety.
+    await runGeneration(refinedPrompt, lockSeed ? seed : undefined);
   };
+
+  // Reroll: same prompt, fresh seed for a different take on the same idea.
+  const handleReroll = () => runGeneration(prompt, undefined);
 
   return (
     <div className="min-h-screen bg-background">
@@ -180,6 +209,25 @@ export default function PreviewPage() {
           <Button onClick={handleDownload} className="gradient-bg glow-primary h-11 px-6">
             <Download className="w-4 h-4 mr-2" /> Download MP4
           </Button>
+          <Button
+            variant="outline"
+            className="h-11 px-5"
+            onClick={handleReroll}
+            disabled={isGenerating || isRefining}
+          >
+            <Dices className="w-4 h-4 mr-2" /> Reroll
+          </Button>
+          {seedSupported && (
+            <Button
+              variant="outline"
+              className={`h-11 px-5 ${lockSeed ? 'border-primary text-primary' : ''}`}
+              onClick={() => setLockSeed((v) => !v)}
+              title={lockSeed ? 'Seed locked: regenerations keep this motion' : 'Lock the seed to keep this motion across regenerations'}
+            >
+              {lockSeed ? <Lock className="w-4 h-4 mr-2" /> : <LockOpen className="w-4 h-4 mr-2" />}
+              {lockSeed ? 'Seed locked' : 'Lock seed'}
+            </Button>
+          )}
           <Button
             variant="outline"
             className="h-11 px-5"
