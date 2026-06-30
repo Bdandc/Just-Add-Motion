@@ -1,8 +1,20 @@
 /// <reference types="vite/client" />
-import { GoogleGenAI, type Schema } from '@google/genai';
+import { type Schema, type GenerateContentParameters } from '@google/genai';
 import type { ModelId } from './fal';
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// Gemini calls route through the server proxy (`/api/gemini`) so the API key
+// stays server-side. The proxy returns `{ text }` — the only field this module reads.
+async function callGemini(request: GenerateContentParameters): Promise<{ text?: string }> {
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(`Gemini proxy error (${res.status})`);
+  }
+  return res.json();
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -169,7 +181,7 @@ export function dataUrlToBase64(dataUrl: string): string {
 // ─── Step 1a: Classify the image (fast, cheap, one word) ─────────────────────
 
 async function classifyImage(base64: string, mimeType: string): Promise<ImageCategory> {
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {
@@ -215,7 +227,7 @@ async function generateSuggestions(
 ): Promise<SuggestedPrompt[]> {
   const rules = CATEGORY_RULES[category];
 
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {
@@ -310,7 +322,7 @@ export async function tailorPromptForModel(
   const complexityHint = COMPLEXITY_HINTS[catType][complexity];
   const modelVocab = MODEL_VOCAB[modelId];
 
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {
@@ -347,7 +359,7 @@ export async function refineMotionPrompt(
   currentPrompt: string,
   editInstruction: string
 ): Promise<string> {
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {

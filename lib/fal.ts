@@ -2,7 +2,8 @@
 import { fal } from '@fal-ai/client';
 
 fal.config({
-  credentials: import.meta.env.VITE_FAL_KEY,
+  // Credentials stay server-side; requests route through the Vercel proxy.
+  proxyUrl: '/api/fal/proxy',
 });
 
 export type ModelId = 'wan' | 'kling' | 'veo3';
@@ -144,7 +145,6 @@ function buildInput(imageUrl: string, input: GenerateVideoInput, aspectRatio: As
 }
 
 function extractVideoUrl(data: unknown): string {
-  console.log('[fal] raw response data:', JSON.stringify(data, null, 2));
   const d = data as Record<string, unknown>;
   const url =
     (d?.video as { url?: string } | undefined)?.url ??
@@ -212,7 +212,6 @@ export async function generateVideo(
 
   onProgress?.('Generating motion...');
   const falInput = buildInput(imageUrl, input, aspectRatio, seed);
-  console.log('[fal] model:', model.falId, 'input:', JSON.stringify({ ...falInput, image_url: '<url>' }));
   const result = await fal.subscribe(model.falId, {
     input: falInput,
     onQueueUpdate(update) {
