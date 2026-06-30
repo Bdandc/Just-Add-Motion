@@ -1,8 +1,28 @@
 /// <reference types="vite/client" />
-import { GoogleGenAI, type Schema } from '@google/genai';
+import { Type, type Schema, type GenerateContentParameters } from '@google/genai';
 import type { ModelId } from './fal';
+import { supabase } from './supabase';
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// Gemini calls route through the server proxy (`/api/gemini`) so the API key
+// stays server-side. The proxy returns `{ text }` — the only field this module reads.
+// The caller's Supabase session token is attached so the proxy can reject
+// unauthenticated callers (the endpoint is not public).
+async function callGemini(request: GenerateContentParameters): Promise<{ text?: string }> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(`Gemini proxy error (${res.status})`);
+  }
+  return res.json();
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -128,10 +148,10 @@ const MODEL_VOCAB: Record<ModelId, string> = {
 // ─── JSON schemas for structured output ──────────────────────────────────────
 
 const CLASSIFICATION_SCHEMA: Schema = {
-  type: 'object' as const,
+  type: Type.OBJECT,
   properties: {
     category: {
-      type: 'string' as const,
+      type: Type.STRING,
       enum: ['ui', 'portrait', 'landscape', 'architecture', 'product', 'food', 'abstract', 'general'],
     },
   },
@@ -139,21 +159,21 @@ const CLASSIFICATION_SCHEMA: Schema = {
 };
 
 const SUGGESTIONS_SCHEMA: Schema = {
-  type: 'object' as const,
+  type: Type.OBJECT,
   properties: {
     suggestions: {
-      type: 'array' as const,
+      type: Type.ARRAY,
       items: {
-        type: 'object' as const,
+        type: Type.OBJECT,
         properties: {
-          label:       { type: 'string' as const },
-          description: { type: 'string' as const },
-          prompt:      { type: 'string' as const },
+          label:       { type: Type.STRING },
+          description: { type: Type.STRING },
+          prompt:      { type: Type.STRING },
         },
         required: ['label', 'description', 'prompt'],
       },
-      minItems: 3,
-      maxItems: 3,
+      minItems: '3',
+      maxItems: '3',
     },
   },
   required: ['suggestions'],
@@ -169,7 +189,7 @@ export function dataUrlToBase64(dataUrl: string): string {
 // ─── Step 1a: Classify the image (fast, cheap, one word) ─────────────────────
 
 async function classifyImage(base64: string, mimeType: string): Promise<ImageCategory> {
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {
@@ -215,7 +235,7 @@ async function generateSuggestions(
 ): Promise<SuggestedPrompt[]> {
   const rules = CATEGORY_RULES[category];
 
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {
@@ -261,17 +281,48 @@ The 3 suggestions must each describe a meaningfully different motion approach.`,
 
 // ─── Public: Classify + suggest ──────────────────────────────────────────────
 
+// Classification and suggestions don't need full resolution, and routing a
+// 20MB image through the serverless proxy would exceed Vercel's request body
+// limit. Downscale to a max edge before sending to Gemini. Non-fatal: falls
+// back to the original on any failure.
+async function downscaleForAnalysis(
+  base64: string,
+  mimeType: string,
+  maxEdge = 1024
+): Promise<{ data: string; mimeType: string }> {
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = `data:${mimeType};base64,${base64}`;
+    });
+    const longest = Math.max(img.width, img.height) || 1;
+    // Always re-encode to JPEG so byte size is capped even when the dimensions
+    // are already small (a low-res PNG/GIF can still be many MB). Downscale on
+    // top when the longest edge exceeds maxEdge.
+    const scale = Math.min(1, maxEdge / longest);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { data: base64, mimeType };
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    return { data: dataUrl.split(',')[1], mimeType: 'image/jpeg' };
+  } catch {
+    return { data: base64, mimeType };
+  }
+}
+
 /**
  * Accepts pre-computed base64 (from the FileReader already used for the image
  * preview) so the file is never read twice.
  */
 export async function analyzeImageForPrompts(base64: string, mimeType: string): Promise<AnalysisResult> {
-  const category = await classifyImage(base64, mimeType);
-  console.log('[gemini] classified as:', category);
-
-  const suggestions = await generateSuggestions(base64, mimeType, category);
-  console.log('[gemini] suggestions:', suggestions);
-
+  const small = await downscaleForAnalysis(base64, mimeType);
+  const category = await classifyImage(small.data, small.mimeType);
+  const suggestions = await generateSuggestions(small.data, small.mimeType, category);
   return { category, suggestions };
 }
 
@@ -310,7 +361,7 @@ export async function tailorPromptForModel(
   const complexityHint = COMPLEXITY_HINTS[catType][complexity];
   const modelVocab = MODEL_VOCAB[modelId];
 
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {
@@ -347,7 +398,7 @@ export async function refineMotionPrompt(
   currentPrompt: string,
   editInstruction: string
 ): Promise<string> {
-  const response = await ai.models.generateContent({
+  const response = await callGemini({
     model: 'gemini-2.5-flash',
     contents: [
       {
