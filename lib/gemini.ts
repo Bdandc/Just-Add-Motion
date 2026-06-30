@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { type Schema, type GenerateContentParameters } from '@google/genai';
+import { Type, type Schema, type GenerateContentParameters } from '@google/genai';
 import type { ModelId } from './fal';
 import { supabase } from './supabase';
 
@@ -148,10 +148,10 @@ const MODEL_VOCAB: Record<ModelId, string> = {
 // ─── JSON schemas for structured output ──────────────────────────────────────
 
 const CLASSIFICATION_SCHEMA: Schema = {
-  type: 'object' as const,
+  type: Type.OBJECT,
   properties: {
     category: {
-      type: 'string' as const,
+      type: Type.STRING,
       enum: ['ui', 'portrait', 'landscape', 'architecture', 'product', 'food', 'abstract', 'general'],
     },
   },
@@ -159,21 +159,21 @@ const CLASSIFICATION_SCHEMA: Schema = {
 };
 
 const SUGGESTIONS_SCHEMA: Schema = {
-  type: 'object' as const,
+  type: Type.OBJECT,
   properties: {
     suggestions: {
-      type: 'array' as const,
+      type: Type.ARRAY,
       items: {
-        type: 'object' as const,
+        type: Type.OBJECT,
         properties: {
-          label:       { type: 'string' as const },
-          description: { type: 'string' as const },
-          prompt:      { type: 'string' as const },
+          label:       { type: Type.STRING },
+          description: { type: Type.STRING },
+          prompt:      { type: Type.STRING },
         },
         required: ['label', 'description', 'prompt'],
       },
-      minItems: 3,
-      maxItems: 3,
+      minItems: '3',
+      maxItems: '3',
     },
   },
   required: ['suggestions'],
@@ -297,12 +297,14 @@ async function downscaleForAnalysis(
       el.onerror = reject;
       el.src = `data:${mimeType};base64,${base64}`;
     });
-    const longest = Math.max(img.width, img.height);
-    if (longest <= maxEdge) return { data: base64, mimeType };
-    const scale = maxEdge / longest;
+    const longest = Math.max(img.width, img.height) || 1;
+    // Always re-encode to JPEG so byte size is capped even when the dimensions
+    // are already small (a low-res PNG/GIF can still be many MB). Downscale on
+    // top when the longest edge exceeds maxEdge.
+    const scale = Math.min(1, maxEdge / longest);
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(img.width * scale);
-    canvas.height = Math.round(img.height * scale);
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
     const ctx = canvas.getContext('2d');
     if (!ctx) return { data: base64, mimeType };
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
