@@ -1,9 +1,22 @@
 /// <reference types="vite/client" />
-import { fal } from '@fal-ai/client';
+import { fal, withMiddleware, withProxy, type RequestMiddleware } from '@fal-ai/client';
+import { supabase } from './supabase';
 
+// Attach the app's Supabase session so the fal proxy can verify the caller and
+// reject unauthenticated requests. Sent as the `x-app-auth` header, which the
+// proxy reads for auth and does NOT forward to fal.
+const addAppAuth: RequestMiddleware = async (request) => {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return {
+    ...request,
+    headers: { ...(request.headers ?? {}), 'x-app-auth': token ? `Bearer ${token}` : '' },
+  };
+};
+
+// Credentials stay server-side; requests route through the Vercel proxy.
 fal.config({
-  // Credentials stay server-side; requests route through the Vercel proxy.
-  proxyUrl: '/api/fal/proxy',
+  requestMiddleware: withMiddleware(addAppAuth, withProxy({ targetUrl: '/api/fal/proxy' })),
 });
 
 export type ModelId = 'wan' | 'kling' | 'veo3';
