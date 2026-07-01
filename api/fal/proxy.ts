@@ -1,6 +1,6 @@
 import { createHandler } from '@fal-ai/server-proxy/express';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { bearerToken, isAuthedRequest } from '../_auth';
+import { bearerToken, isAuthedRequest } from '../_auth.js';
 
 // Server-side proxy for fal.ai requests. Keeps FAL_KEY off the client, gates on
 // the caller's Supabase session, and restricts to the fal endpoints this app

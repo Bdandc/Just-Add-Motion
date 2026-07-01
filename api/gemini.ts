@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { bearerToken, isAuthedRequest } from './_auth';
+import { bearerToken, isAuthedRequest } from './_auth.js';
 
 // Server-side proxy for Gemini generateContent calls. Keeps the Gemini API key
 // out of the browser bundle, gates on the caller's Supabase session, and only
